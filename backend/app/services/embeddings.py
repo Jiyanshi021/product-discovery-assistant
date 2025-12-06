@@ -9,9 +9,11 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.product import Product
 
-_embedder: SentenceTransformer | None = None
-_qdrant: QdrantClient | None = None
-_VECTOR_DIM: int | None = None
+# --- Globals / singletons ---
+
+_embedder: Optional[SentenceTransformer] = None
+_qdrant: Optional[QdrantClient] = None
+_VECTOR_DIM: Optional[int] = None
 
 # 👉 Must match "Vector name" in Qdrant collection UI
 QDRANT_VECTOR_NAME = "product_vector"
@@ -165,7 +167,7 @@ def semantic_search(
 
     q_vec = embedder.encode([query], normalize_embeddings=True)[0].tolist()
 
-    query_filter = None
+    query_filter: Optional[qmodels.Filter] = None
     if allowed_product_ids:
         query_filter = qmodels.Filter(
             must=[
@@ -176,14 +178,14 @@ def semantic_search(
             ]
         )
 
-    # 👉 Use NamedVector for named collection vector
-    results = client.query_points(
+    # ✅ New API: use query_points (no .search anywhere)
+    resp = client.query_points(
         collection_name=settings.QDRANT_COLLECTION,
-        query_vector=qmodels.NamedVector(
-            name=QDRANT_VECTOR_NAME,
-            vector=q_vec,
-        ),
+        query=q_vec,                      # query vector
+        query_filter=query_filter,        # optional payload filter
+        using=QDRANT_VECTOR_NAME,         # which named vector to use
+        with_payload=True,
         limit=limit,
-        query_filter=query_filter,
     )
-    return results
+
+    return resp.points

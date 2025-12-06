@@ -24,8 +24,10 @@ def create_app() -> FastAPI:
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         # ✅ your Vercel frontend URL yahan daalo:
-        "https://product-discovery-assistant-meu1avn3s.vercel.app",
-        "https://product-discovery-assistant-1ubfmcs2q.vercel.app",
+        "https://product-discovery-assistant-ochre.vercel.app/"
+        # "https://product-discovery-assistant-meu1avn3s.vercel.app",
+        # "https://product-discovery-assistant-1ubfmcs2q.vercel.app",
+         
     ]
 
     app.add_middleware(
