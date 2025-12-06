@@ -1,5 +1,5 @@
 // src/pages/ChatPage.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { searchProducts } from "../api.js";
 import ProductCard from "../components/ProductCard.jsx";
@@ -19,6 +19,13 @@ const ChatPage = () => {
   const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
+
+  // ---------- auto-scroll to newest message ----------
+  const messagesEndRef = useRef(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   // ---------- helpers for safe text + simple markdown ----------
 
@@ -96,7 +103,7 @@ const ChatPage = () => {
   async function handleSend(e) {
     e.preventDefault();
     const trimmed = input.trim();
-    if (!trimmed) return;
+    if (!trimmed || loading) return;
 
     const now = Date.now();
 
@@ -120,6 +127,7 @@ const ChatPage = () => {
         res.answer ||
         "I couldn't find anything specific, but here are some options.";
 
+      // 👉 Pehle answer text decide karo, fir uske hisaab se product order
       const orderedResults = orderProductsByAnswerText(rawResults, answerText);
 
       const botMessage = {
@@ -168,12 +176,12 @@ const ChatPage = () => {
         <h1 className="mt-4 font-serif text-3xl md:text-4xl font-bold text-text-light text-center">
           Chat with your AI Stylist
         </h1>
-        <p className="mt-1 text-center text-sm text-text-muted-light">
+        <p className="mt-1 text-center text-xs sm:text-sm text-text-muted-light">
           Tell me your vibe, budget or occasion and I’ll suggest outfits from Hunnit.
         </p>
 
         {/* Chat container */}
-        <div className="mt-8 flex flex-col bg-card-light/70 rounded-3xl shadow-lg p-5 sm:p-6 md:p-8 h-[72vh] md:h-[78vh] border border-accent/10">
+        <div className="mt-8 flex flex-col bg-card-light/70 rounded-3xl shadow-lg p-4 sm:p-6 md:p-8 h-[68vh] sm:h-[74vh] md:h-[78vh] border border-accent/10">
           {/* Messages */}
           <div className="flex-1 overflow-y-auto space-y-4 pr-1 md:pr-2">
             {messages.map((m) => {
@@ -188,7 +196,7 @@ const ChatPage = () => {
                 >
                   {/* Bubble */}
                   <div
-                    className={`max-w-[85%] md:max-w-[70%] rounded-2xl px-4 py-2 leading-relaxed ${
+                    className={`max-w-[90%] sm:max-w-[75%] rounded-2xl px-4 py-2 leading-relaxed ${
                       m.sender === "user"
                         ? "bg-accent text-white text-sm"
                         : "bg-card-light text-text-light text-sm"
@@ -206,21 +214,22 @@ const ChatPage = () => {
                           const id = p.product_id || p.id;
 
                           return (
-                            <ProductCard
-                              key={id}
-                              product={{
-                                id,
-                                title: p.title,
-                                brand: p.brand,
-                                price: p.price,
-                                image_url: p.image_url,
-                              }}
-                              isPrimary={
-                                m.primaryProductId
-                                  ? id === m.primaryProductId
-                                  : false
-                              }
-                            />
+                            <div key={id} className="animate-fadeIn">
+                              <ProductCard
+                                product={{
+                                  id,
+                                  title: p.title,
+                                  brand: p.brand,
+                                  price: p.price,
+                                  image_url: p.image_url,
+                                }}
+                                isPrimary={
+                                  m.primaryProductId
+                                    ? id === m.primaryProductId
+                                    : false
+                                }
+                              />
+                            </div>
                           );
                         })}
                       </div>
@@ -231,21 +240,24 @@ const ChatPage = () => {
 
             {loading && (
               <div className="flex justify-start">
-                <div className="max-w-[70%] rounded-2xl px-4 py-2 text-sm bg-card-light text-text-muted-light">
-                  Thinking…
+                <div className="max-w-[70%] rounded-2xl px-4 py-2 text-sm bg-card-light text-text-muted-light animate-pulse">
+                  Typing…
                 </div>
               </div>
             )}
+
+            {/* auto-scroll anchor */}
+            <div ref={messagesEndRef} />
           </div>
 
           {/* Input */}
           <form
             onSubmit={handleSend}
-            className="mt-4 flex items-center gap-3 border-t border-text-light/10 pt-3"
+            className="mt-4 flex items-center gap-2 sm:gap-3 border-t border-text-light/10 pt-3"
           >
             <input
               type="text"
-              className="flex-1 rounded-full bg-background-light border border-text-light/20 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
+              className="flex-1 rounded-full bg-background-light border border-text-light/20 px-3 sm:px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Describe what you want to wear..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -253,9 +265,13 @@ const ChatPage = () => {
             <button
               type="submit"
               disabled={loading}
-              className="rounded-full px-6 py-2 text-sm font-medium bg-accent text-white hover:bg-accent/90 disabled:opacity-60"
+              className="inline-flex items-center justify-center rounded-full px-5 sm:px-6 py-2 text-sm font-medium bg-accent text-white hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Send
+              {loading ? (
+                <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                "Send"
+              )}
             </button>
           </form>
         </div>
