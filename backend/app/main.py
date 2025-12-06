@@ -15,7 +15,7 @@ from app.models.product import Product
 def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.PROJECT_NAME,
-        redirect_slashes=False,
+        redirect_slashes=True,
         version="0.1.0",
     )
 
@@ -24,12 +24,13 @@ def create_app() -> FastAPI:
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         # ✅ your Vercel frontend URL yahan daalo:
-        "product-discovery-assistant-meu1avn3s.vercel.app",
+        "https://product-discovery-assistant-meu1avn3s.vercel.app",
+        "https://product-discovery-assistant-1ubfmcs2q.vercel.app",
     ]
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=origins,
+        allow_origins=["*"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
