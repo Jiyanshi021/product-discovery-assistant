@@ -13,6 +13,9 @@ _embedder: SentenceTransformer | None = None
 _qdrant: QdrantClient | None = None
 _VECTOR_DIM: int | None = None
 
+# 👉 Must match "Vector name" in Qdrant collection UI
+QDRANT_VECTOR_NAME = "product_vector"
+
 
 def get_embedder() -> SentenceTransformer:
     """
@@ -40,7 +43,8 @@ def get_qdrant() -> QdrantClient:
 
 def ensure_collection() -> None:
     """
-    Make sure the Qdrant collection exists with correct vector size.
+    Make sure the Qdrant collection exists with correct vector size
+    and named vector config.
     """
     client = get_qdrant()
     embedder = get_embedder()
@@ -51,12 +55,15 @@ def ensure_collection() -> None:
     if settings.QDRANT_COLLECTION in names:
         return
 
+    # Create collection with a NAMED dense vector
     client.create_collection(
         collection_name=settings.QDRANT_COLLECTION,
-        vectors_config=qmodels.VectorParams(
-            size=vector_dim,
-            distance=qmodels.Distance.COSINE,
-        ),
+        vectors_config={
+            QDRANT_VECTOR_NAME: qmodels.VectorParams(
+                size=vector_dim,
+                distance=qmodels.Distance.COSINE,
+            )
+        },
     )
 
 
@@ -97,7 +104,7 @@ def index_all_products(db: Session, skip_if_indexed: bool = False) -> int:
         if info.points_count and info.points_count > 0:
             print(
                 f"ℹ️ Qdrant collection '{settings.QDRANT_COLLECTION}' "
-                f"already has points — skipping re-index on startup."
+                f"already has {info.points_count} points — skipping re-index on startup."
             )
             return 0
 
@@ -128,11 +135,12 @@ def index_all_products(db: Session, skip_if_indexed: bool = False) -> int:
             }
         )
 
+    # 👉 Upsert with NAMED vector
     client.upsert(
         collection_name=settings.QDRANT_COLLECTION,
         points=qmodels.Batch(
             ids=ids,
-            vectors=vectors,
+            vectors={QDRANT_VECTOR_NAME: vectors},
             payloads=payloads,
         ),
     )
@@ -168,9 +176,13 @@ def semantic_search(
             ]
         )
 
+    # 👉 Use NamedVector for named collection vector
     results = client.search(
         collection_name=settings.QDRANT_COLLECTION,
-        query_vector=q_vec,
+        query_vector=qmodels.NamedVector(
+            name=QDRANT_VECTOR_NAME,
+            vector=q_vec,
+        ),
         limit=limit,
         query_filter=query_filter,
     )
