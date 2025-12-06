@@ -2,15 +2,14 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.v1 import health, products, search, scrape
-
 
 from app.core.config import settings
-from app.api.v1 import health, products, search
+from app.api.v1 import health, products, search, scrape
 from app.db.session import SessionLocal
 from app.services.embeddings import index_all_products
 from app.services.graph import sync_products_to_graph
 from app.models.product import Product
+
 
 
 def create_app() -> FastAPI:
@@ -24,6 +23,8 @@ def create_app() -> FastAPI:
     origins = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        # ✅ your Vercel frontend URL yahan daalo:
+        "product-discovery-assistant-meu1avn3s.vercel.app",
     ]
 
     app.add_middleware(
@@ -35,7 +36,7 @@ def create_app() -> FastAPI:
     )
 
     # ---------- v1 routes ----------
-    prefix = settings.API_V1_PREFIX  # should be "/api/v1"
+    prefix = settings.API_V1_PREFIX  # "/api/v1"
     app.include_router(health.router, prefix=prefix)
     app.include_router(products.router, prefix=prefix)
     app.include_router(search.router, prefix=prefix)
@@ -44,30 +45,31 @@ def create_app() -> FastAPI:
     # ---------- global error handler ----------
     @app.exception_handler(Exception)
     async def generic_exception_handler(request: Request, exc: Exception):
-        # TODO: log exc in real app
+        # TODO: logging
         return JSONResponse(
             status_code=500,
             content={"detail": "Internal server error"},
         )
 
-    # ---------- startup ----------
+    # ---------- startup (Qdrant + Neo4j) ----------
     @app.on_event("startup")
     def startup_index_qdrant_and_kg():
         print("🪄 Starting up — syncing embeddings & knowledge graph...")
         db = SessionLocal()
         try:
-            # 1) Qdrant embeddings (runs only if empty)
+            # 1) Qdrant embeddings (runs only if already empty)
             emb_chunks = index_all_products(db, skip_if_indexed=True)
 
-            # 2) Neo4j KG (also only once, if no Product nodes)
+            # 2) Neo4j KG (only if NEO4J_ENABLED=True)
             products = db.query(Product).all()
             kg_nodes = sync_products_to_graph(products, skip_if_exists=True)
 
             print(
-                f"✨ Embedding chunks indexed (new): {emb_chunks}, "
+                f"✨ Embedding products indexed (new): {emb_chunks}, "
                 f"KG products synced (new): {kg_nodes}"
             )
         except Exception as e:
+            # important: startup failure should NOT crash app on Render
             print("❌ Error during startup embedding/KG sync:", e)
         finally:
             db.close()
