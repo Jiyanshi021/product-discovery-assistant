@@ -3,6 +3,7 @@
 **TL;DR:**
 A full-stack AI Product Discovery system that scrapes clothing products from Hunnit.com using ScraperAPI, stores them in PostgreSQL (Neon), indexes them in Qdrant, enriches them with a Neo4j Knowledge Graph, and serves intelligent outfit recommendations via a FastAPI backend and a modern React frontend.
 
+Prototype link: https://product-discovery-assistant-ochre.vercel.app/
 ---
 
 # **Table of Contents**
@@ -252,7 +253,7 @@ J --> D
 
 ---
 
-# 🕸️ **Scraping Approach (ScraperAPI + BeautifulSoup)**
+#  **Scraping Approach (ScraperAPI + BeautifulSoup)**
 
 ### **Files**
 
@@ -371,6 +372,8 @@ Now give a friendly recommendation:
 ---
 
 #  **Knowledge Graph (Neo4j) Design**
+
+<img width="645" height="562" alt="image" src="https://github.com/user-attachments/assets/2ba76a6b-ffb9-421c-b9f9-42c68e2577ea" />
 
 Nodes:
 
