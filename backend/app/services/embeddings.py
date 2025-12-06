@@ -177,7 +177,7 @@ def semantic_search(
         )
 
     # 👉 Use NamedVector for named collection vector
-    results = client.search(
+    results = client.query_points(
         collection_name=settings.QDRANT_COLLECTION,
         query_vector=qmodels.NamedVector(
             name=QDRANT_VECTOR_NAME,
