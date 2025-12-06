@@ -1,31 +1,3 @@
-// // src/App.jsx
-// import React from "react";
-// import { Routes, Route } from "react-router-dom";
-
-// import Header from "./components/Header.jsx";
-// import HomePage from "./pages/HomePage.jsx";
-// import ChatPage from "./pages/ChatPage.jsx";
-// import ProductDetailPage from "./pages/ProductDetailPage.jsx";
-
-// function App() {
-//   return (
-//     <div className="min-h-screen bg-background-light text-text-light">
-//       {/* Sticky header on all pages */}
-//       <Header />
-
-//       {/* Page content */}
-//       <Routes>
-//         <Route path="/" element={<HomePage />} />
-//         <Route path="/chat" element={<ChatPage />} />
-//         <Route path="/products/:id" element={<ProductDetailPage />} />
-//       </Routes>
-//     </div>
-//   );
-// }
-
-// export default App;
-
-
 
 // src/App.jsx
 import React from "react";
@@ -39,65 +11,44 @@ function App() {
     <div className="min-h-screen bg-background-light text-text-light">
       <div className="smai-page mx-auto">
         {/* Header nav */}
-        <nav className="flex items-center justify-between px-6 sm:px-10 lg:px-20 py-4 bg-background-light">
-          {/* Logo */}
+        <nav className="flex items-center justify-between px-6 sm:px-10 lg:px-20 py-4 bg-background-light border-b border-black/5">
+          {/* Logo (left) */}
           <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-accent">auto_awesome</span>
-            <span className="font-serif font-semibold text-lg tracking-wide">
-              StyleMatch AI
+            <span className="material-symbols-outlined text-accent">
+              auto_awesome
+            </span>
+            <span className="font-serif font-semibold text-lg md:text-xl tracking-wide">
+              HunnitAssistance AI
             </span>
           </div>
 
-          {/* Center nav links */}
-          <div className="hidden md:flex items-center gap-8 text-sm">
-            <Link
-              to="/"
-              className="hover:text-accent transition-colors"
-            >
-              Home
-            </Link>
-            <Link
-              to="/chat"
-              className="hover:text-accent transition-colors"
-            >
-              Chat
-            </Link>
-            <button
-              type="button"
-              className="hover:text-accent transition-colors"
-            >
-              Men
-            </button>
-            <button
-              type="button"
-              className="hover:text-accent transition-colors"
-            >
-              Women
-            </button>
-            <button
-              type="button"
-              className="hover:text-accent transition-colors"
-            >
-              Accessories
-            </button>
+          {/* Center nav links: Home + Chat only */}
+          <div className="flex-1 flex justify-center">
+            <div className="inline-flex items-center gap-4 md:gap-6">
+              <Link
+                to="/"
+                className="px-4 md:px-5 py-1.5 md:py-2 rounded-full text-sm md:text-base font-medium hover:bg-accent/10 hover:text-accent transition-colors"
+              >
+                Home
+              </Link>
+              <Link
+                to="/chat"
+                className="px-4 md:px-5 py-1.5 md:py-2 rounded-full text-sm md:text-base font-medium hover:bg-accent/10 hover:text-accent transition-colors"
+              >
+                Chat
+              </Link>
+            </div>
           </div>
 
-          {/* Icons */}
-          <div className="flex items-center gap-2">
-            <button className="p-2 rounded-full hover:bg-black/5">
-              <span className="material-symbols-outlined text-lg">search</span>
-            </button>
-            <button className="p-2 rounded-full hover:bg-black/5">
-              <span className="material-symbols-outlined text-lg">person</span>
-            </button>
-          </div>
+          {/* Right spacer for balance */}
+          <div className="w-8 sm:w-12" />
         </nav>
 
         {/* Routed pages */}
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/chat" element={<ChatPage />} />
-          {/* NEW: product detail route */}
+          {/* product detail route */}
           <Route path="/products/:id" element={<ProductDetailPage />} />
         </Routes>
       </div>

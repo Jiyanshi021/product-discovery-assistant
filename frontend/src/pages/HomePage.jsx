@@ -14,11 +14,7 @@ const HomePage = () => {
       try {
         setStatus("loading");
 
-        // 👇 Yaha se ?limit=6 hata diya – ab backend jitne bhi products bhejega sab aa jayenge
         const res = await fetch(`${API_BASE_URL}/products/`);
-
-        // Agar tum backend me limit use kar rahe ho to aise bhi kar sakte ho:
-        // const res = await fetch(`${API_BASE_URL}/products/?limit=200`);
 
         if (!res.ok) {
           const text = await res.text();
@@ -52,7 +48,7 @@ const HomePage = () => {
             Find Your Signature Style
           </h1>
           <p className="text-text-muted-light max-w-xl mb-4 md:mb-6">
-            Discover outfits from Hunnit curated by AI, tailored to your vibe,
+            Discover outfits from Hunnit, tailored to your vibe,
             occasions, and comfort.
           </p>
         </div>
@@ -67,8 +63,7 @@ const HomePage = () => {
 
           {status === "error" && (
             <p className="text-center text-xs text-red-500 mb-4">
-              Backend se products load nahi ho paaye. Browser console me error
-              details check karo.
+              Some issue in loading products from backend
             </p>
           )}
 
@@ -88,14 +83,22 @@ const HomePage = () => {
         </div>
       </main>
 
-      {/* Floating Chat Bubble → /chat */}
-      <Link
-        to="/chat"
-        className="fixed bottom-6 right-6 md:bottom-8 md:right-8 inline-flex items-center justify-center rounded-full shadow-lg bg-accent text-white w-14 h-14 md:w-16 md:h-16 hover:scale-105 transition-transform"
-        aria-label="Open AI chat"
-      >
-        <span className="text-2xl md:text-3xl">💬</span>
-      </Link>
+      {/* Floating Chat CTA: tooltip + bubble */}
+      <div className="fixed bottom-6 right-6 md:bottom-8 md:right-8 flex flex-col items-end gap-2">
+        {/* Small box above bubble */}
+        <div className="rounded-2xl bg-card-light/90 border border-accent/40 shadow-md px-4 py-2 text-xs sm:text-sm text-text-light max-w-[220px]">
+          Get outfit suggestions with AI
+        </div>
+
+        {/* Chat Bubble → /chat */}
+        <Link
+          to="/chat"
+          className="inline-flex items-center justify-center rounded-full shadow-lg bg-accent text-white w-14 h-14 md:w-16 md:h-16 hover:scale-105 transition-transform"
+          aria-label="Open AI chat"
+        >
+          <span className="text-2xl md:text-3xl">💬</span>
+        </Link>
+      </div>
     </>
   );
 };
