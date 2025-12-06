@@ -13,10 +13,11 @@ class Settings(BaseSettings):
     # Qdrant (vector DB)
     QDRANT_URL: str
     QDRANT_API_KEY: str
-    QDRANT_COLLECTION: str = "products_collection"
+    QDRANT_COLLECTION: str = "products_collection_minilm"
 
     # Embedding model
-    BGE_MODEL_NAME: str = "BAAI/bge-m3"
+    BGE_MODEL_NAME: str = "sentence-transformers/all-MiniLM-L6-v2"
+    EMBEDDING_DIM: int = 384
 
     # LLMs
     GROQ_API_KEY: str
