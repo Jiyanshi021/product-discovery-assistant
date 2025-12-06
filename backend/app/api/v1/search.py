@@ -1,5 +1,6 @@
 # app/api/v1/search.py
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Set
+import re
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -8,71 +9,53 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.services.embeddings import semantic_search
 from app.services.llm import answer_with_rag
-from app.services.graph import get_kg_context_for_products
+from app.services.graph import (
+    get_kg_context_for_products,
+    get_candidate_product_ids_from_kg,
+)
 
 router = APIRouter(tags=["search"])
 
 
-# -----------------------------
-#  Category synonyms (Hunnit)
-# -----------------------------
+# ---------------------------------------------------------
+#  Minimal category synonyms (query language → category)
+#  Neo4j holds the true categories; this is only a hint.
+# ---------------------------------------------------------
 CATEGORY_SYNONYMS: Dict[str, List[str]] = {
     "hoodie": [
         "hoodie",
         "hoodies",
-        "gym hoodie",
-        "gym hoodies",
-        "workout hoodie",
-        "workout hoodies",
-        "active hoodie",
-        "fleece hoodie",
-        "oversized hoodie",
-        "oversized hoodies",
-        "zip hoodie",
-        "zip-up hoodie",
-        "full zip hoodie",
-        "cropped hoodie",
-        "hooded jacket",
         "hooded sweatshirt",
-        "sweat jacket",
+        "hooded jacket",
+        "zip hoodie",
+        "oversized hoodie",
     ],
     "tshirt": [
         "tshirt",
         "t-shirt",
         "tee",
         "tees",
-        "crew neck",
-        "crew-neck tee",
-        "round neck",
         "top",
-        "tank top",
-        "tank",
         "crop top",
-        "cropped tee",
+        "tank top",
         "training top",
         "gym top",
-        "workout top",
     ],
     "shorts": [
         "shorts",
-        "gym shorts",
-        "workout shorts",
-        "sports shorts",
-        "active shorts",
         "running shorts",
         "biker shorts",
-        "high-waisted shorts",
-        "co-ord shorts",
-        "shorts co-ord",
-        "bottoms",
-        "active bottom",
-        "sport bottom",
+        "gym shorts",
+        "workout shorts",
     ],
 }
 
 
 def detect_intent_category(query: str) -> str | None:
-    """Guess which category user is talking about (hoodie / tshirt / shorts)."""
+    """
+    Guess which logical category the user is talking about
+    (hoodie / tshirt / shorts) using a small synonyms map.
+    """
     q = query.lower()
     for cat, syns in CATEGORY_SYNONYMS.items():
         if any(syn in q for syn in syns):
@@ -81,11 +64,82 @@ def detect_intent_category(query: str) -> str | None:
 
 
 def enrich_query(query: str, category: str | None) -> str:
-    """Append synonyms to the query so embeddings get stronger signal."""
+    """
+    Append a few synonyms to the query so embeddings
+    get a stronger signal for the intended category.
+    """
     if category and category in CATEGORY_SYNONYMS:
         extra = " ".join(CATEGORY_SYNONYMS[category])
         return f"{query} {extra}"
     return query
+
+
+# ---------------------------------------------------------
+#   Price + tag extraction from natural language query
+# ---------------------------------------------------------
+
+PRICE_PATTERN = re.compile(r"(under|below|upto|up to|<)\s*(\d+)", re.IGNORECASE)
+
+STOPWORDS: Set[str] = {
+    "show",
+    "me",
+    "some",
+    "for",
+    "under",
+    "below",
+    "upto",
+    "up",
+    "to",
+    "please",
+    "want",
+    "need",
+    "something",
+    "nice",
+    "good",
+    "budget",
+    "wear",
+    "outfit",
+    "and",
+    "also",
+}
+
+
+def extract_max_price(query: str) -> float | None:
+    """Extract max price from patterns like 'under 2000'."""
+    m = PRICE_PATTERN.search(query)
+    if not m:
+        return None
+    try:
+        return float(m.group(2))
+    except ValueError:
+        return None
+
+
+def extract_tags(query: str, category: str | None) -> List[str]:
+    """
+    Lightweight tag extraction for KG matching.
+    Example: 'oversized hoodies for gym under 2000'
+      → ['oversized', 'gym']
+    """
+    words = re.findall(r"[a-zA-Z]+", query.lower())
+    tags = [w for w in words if len(w) >= 4 and w not in STOPWORDS]
+
+    # Remove explicit category tokens so tags focus on style / use-case
+    if category and category in CATEGORY_SYNONYMS:
+        remove: Set[str] = set()
+        for syn in CATEGORY_SYNONYMS[category]:
+            for tok in syn.split():
+                remove.add(tok.lower())
+        tags = [t for t in tags if t not in remove]
+
+    # Deduplicate but preserve order
+    seen: Set[str] = set()
+    unique_tags: List[str] = []
+    for t in tags:
+        if t not in seen:
+            seen.add(t)
+            unique_tags.append(t)
+    return unique_tags
 
 
 class SearchRequest(BaseModel):
@@ -95,8 +149,7 @@ class SearchRequest(BaseModel):
 def _compute_mention_bonus(prod: Dict[str, Any], answer_text: str) -> float:
     """
     Give extra score if product title/category words appear in LLM answer.
-    This is what forces 'Essential Cropped Jacket' type items to the top
-    when bot explicitly recommends them in text.
+    This forces the items the bot explicitly talks about to the top.
     """
     if not answer_text:
         return 0.0
@@ -125,14 +178,39 @@ def _compute_mention_bonus(prod: Dict[str, Any], answer_text: str) -> float:
 
 
 def _run_search(query: str, db: Session) -> Dict[str, Any]:
-    # 1) Detect category + enrich query for embeddings
-    intent_category = detect_intent_category(query)
+    # 1) Understand intent from the query
+    intent_category = detect_intent_category(query)          # e.g. "hoodie"
+    max_price = extract_max_price(query)                     # e.g. 2000
+    tags = extract_tags(query, intent_category)              # e.g. ["oversized", "gym"]
+
+    # Enrich query for embeddings (semantic layer)
     enriched_query = enrich_query(query, intent_category)
 
-    # 2) Vector search (take a bit more, we'll re-rank later)
-    points = semantic_search(enriched_query, limit=10)
+    # 2) Ask Neo4j KG for conceptual candidate product_ids
+    #    This uses true categories + feature nodes.
+    kg_candidate_ids: Set[int] = set()
+    if intent_category or max_price or tags:
+        try:
+            kg_ids = get_candidate_product_ids_from_kg(
+                category_hint=intent_category,  # can be None
+                max_price=max_price,            # can be None
+                tags=tags,                      # can be []
+            )
+            kg_candidate_ids = set(kg_ids or [])
+        except Exception:
+            # If KG is off / down, don't break search – just skip KG filter.
+            kg_candidate_ids = set()
+
+    # 3) Vector search in Qdrant (semantic layer)
+    points = semantic_search(enriched_query, limit=20)
     if not points:
-        return {"answer": "I couldn't find any relevant products.", "results": []}
+        msg = "I couldn't find any relevant products."
+        if intent_category:
+            msg = (
+                f"I couldn't find any strong matches for {intent_category}s. "
+                "Try rephrasing or relaxing your constraints."
+            )
+        return {"answer": msg, "results": []}
 
     rag_chunks: List[str] = []
     product_map: Dict[int, Dict[str, Any]] = {}
@@ -152,7 +230,9 @@ def _run_search(query: str, db: Session) -> Dict[str, Any]:
         product_url = payload.get("product_url") or ""
         chunk_text = payload.get("chunk_text") or ""
 
-        # RAG context
+        score = float(p.score or 0.0)
+
+        # Build RAG context out of all relevant chunks
         rag_chunks.append(
             f"Title: {title}\n"
             f"Category: {category}\n"
@@ -161,8 +241,8 @@ def _run_search(query: str, db: Session) -> Dict[str, Any]:
             f"Snippet: {chunk_text}"
         )
 
-        # Best score per product_id
-        if pid not in product_map or p.score > product_map[pid]["score"]:
+        # Keep best score per product
+        if pid not in product_map or score > product_map[pid]["score"]:
             product_map[pid] = {
                 "id": pid,
                 "title": title,
@@ -171,36 +251,43 @@ def _run_search(query: str, db: Session) -> Dict[str, Any]:
                 "description": description,
                 "image_url": image_url,
                 "product_url": product_url,
-                "score": float(p.score or 0.0),
+                "score": score,
             }
 
-        product_scores.append((pid, float(p.score or 0.0)))
+        product_scores.append((pid, score))
 
     if not product_map:
         return {"answer": "I couldn't find any relevant products.", "results": []}
 
-    # Order by semantic score first (so context is still high quality)
+    # 4) Order products by raw semantic score
     ordered_ids: List[int] = []
-    seen: set[int] = set()
+    seen_ids: Set[int] = set()
     for pid, _ in sorted(product_scores, key=lambda x: -x[1]):
-        if pid not in seen:
+        if pid not in seen_ids:
             ordered_ids.append(pid)
-            seen.add(pid)
+            seen_ids.add(pid)
+
+    # 4b) HYBRID: if KG returned candidates, restrict to them.
+    #     This is where Neo4j actually influences what we surface.
+    if kg_candidate_ids:
+        filtered_ids = [pid for pid in ordered_ids if pid in kg_candidate_ids]
+        # Only override if KG gave at least some overlap
+        if filtered_ids:
+            ordered_ids = filtered_ids
 
     base_results = [product_map[pid] for pid in ordered_ids]
 
-    # 3) Add KG conceptual context
+    # 5) Add KG conceptual context for these products for RAG
     kg_chunks = get_kg_context_for_products(ordered_ids)
     rag_chunks.extend(kg_chunks)
 
-    # 4) Ask LLM for final answer
+    # 6) Ask LLM to synthesize an answer
     answer = answer_with_rag(query, rag_chunks)
     answer_text = answer or ""
     answer_lower = answer_text.lower()
 
-    # 5) Re-rank results using "mentioned in answer" bonus
-    #    → ensures the product that bot talks about first
-    #      appears as the first card.
+    # 7) Re-rank products so the ones explicitly mentioned by LLM
+    #    (by title / category) float to the top.
     def final_score(prod: Dict[str, Any]) -> float:
         base = float(prod.get("score") or 0.0)
         bonus = _compute_mention_bonus(prod, answer_lower)
@@ -208,14 +295,17 @@ def _run_search(query: str, db: Session) -> Dict[str, Any]:
 
     reranked_results = sorted(base_results, key=final_score, reverse=True)
 
-    # Optional: cap to top N cards (e.g. 6) so UI clean rahe
+    # 8) Keep only top-N for UI cleanliness
     TOP_N = 6
     final_results = reranked_results[:TOP_N]
 
     return {"answer": answer_text, "results": final_results}
 
 
-@router.get("/search", summary="Semantic product search with RAG + KG + LLM-aware ranking")
+@router.get(
+    "/search",
+    summary="Semantic product search with RAG + KG + LLM-aware ranking",
+)
 def search_products(
     query: str = Query(..., description="User question or search query"),
     db: Session = Depends(get_db),
@@ -223,12 +313,15 @@ def search_products(
     return _run_search(query, db)
 
 
-@router.post("/search", summary="Semantic product search with RAG + KG + LLM-aware ranking")
+@router.post(
+    "/search",
+    summary="Semantic product search with RAG + KG + LLM-aware ranking",
+)
 def search_products_post(
     body: SearchRequest,
     db: Session = Depends(get_db),
 ):
     """
-    POST variant so the frontend can send JSON: { "query": "hoodies" }.
+    POST variant so the frontend can send JSON: { "query": "hoodies under 2000" }.
     """
     return _run_search(body.query, db)

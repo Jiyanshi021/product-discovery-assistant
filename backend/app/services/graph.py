@@ -1,8 +1,7 @@
 # app/services/graph.py
-from typing import List
+from typing import List, Dict, Any
 
 from neo4j import GraphDatabase, Driver
-from typing import List, Dict, Any
 
 from app.core.config import settings
 from app.models.product import Product
@@ -115,6 +114,7 @@ def _count_products_tx(tx) -> int:
 
 def _delete_kg_tx(tx):
     """
+    (Currently unused)
     Delete current KG for this app only:
     - all Product nodes
     - any Category/Feature nodes that become orphan.
@@ -148,14 +148,13 @@ def sync_products_to_graph(
     """
     Push products into Neo4j as a small knowledge graph.
 
-    Behaviour:
+    New behaviour (to avoid expensive rebuilds):
     - If NEO4J_ENABLED=False  → skip completely.
     - If no products in DB     → skip.
-    - If existing Product node count == DB product count and skip_if_exists=True
-        → assume fully in-sync, SKIP (fast startup).
-    - Otherwise (partial graph OR new products added):
-        → wipe current KG for this app (Product/Category/Feature) and rebuild
-          from scratch from Postgres.
+    - If ANY Product nodes already exist in Neo4j AND skip_if_exists=True
+        → assume graph is already prepared, SKIP (no rebuild, no delete).
+    - Otherwise:
+        → only upsert products (MERGE) without deleting existing graph.
     """
     if not settings.NEO4J_ENABLED:
         print("ℹ️ Neo4j disabled (NEO4J_ENABLED=False) — skipping KG sync.")
@@ -167,28 +166,23 @@ def sync_products_to_graph(
     driver = get_neo4j_driver()
     ensure_schema()
 
-    db_count = len(products)
-
     with driver.session() as session:
         existing = session.execute_read(_count_products_tx)
 
-        if skip_if_exists and existing == db_count and existing > 0:
-            # Perfectly in sync → nothing to do.
+        # 🔹 IMPORTANT CHANGE:
+        # Agar graph me already koi Product nodes hain aur hum skip_if_exists=True
+        # use kar rahe hain (startup case), to direct skip kar do — mismatch
+        # check ya rebuild nahi hoga.
+        if skip_if_exists and existing > 0:
             print(
-                f"ℹ️ Neo4j already synced "
-                f"(Product nodes: {existing}, DB products: {db_count}) — skipping KG sync."
+                f"ℹ️ Existing Neo4j KG detected "
+                f"(Product nodes: {existing}) — skipping KG sync."
             )
             return 0
 
-        if existing != 0 and existing != db_count:
-            # Partial / inconsistent graph → rebuild clean.
-            print(
-                f"⚠️ Neo4j Product count ({existing}) != DB products ({db_count}) "
-                f"— rebuilding KG from scratch."
-            )
-            session.execute_write(_delete_kg_tx)
-
-        # Rebuild or initial build: MERGE all products.
+        # Agar skip_if_exists=False diya hai, to soft upsert karega
+        # (NO delete, NO full rebuild) — sirf MERGE.
+        upserted = 0
         for p in products:
             if isinstance(p.features, dict):
                 feats = [f"{k}: {v}" for k, v in p.features.items()]
@@ -209,8 +203,10 @@ def sync_products_to_graph(
                 price_val,
                 feats,
             )
+            upserted += 1
 
-    return db_count
+    return upserted
+
 
 def get_candidate_product_ids_from_kg(
     category_hint: str | None,
@@ -269,6 +265,7 @@ def get_candidate_product_ids_from_kg(
 
         ids: List[int] = [rec["id"] for rec in result if rec.get("id") is not None]
         return ids
+
 
 def get_kg_context_for_products(product_ids: List[int]) -> List[str]:
     """

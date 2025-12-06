@@ -24,8 +24,8 @@ class Settings(BaseSettings):
 
     # Neo4j (Knowledge Graph)
     # KG is OFF by default; turn it on later via .env
-    NEO4J_ENABLED: bool = False
-    NEO4J_URI: str = "bolt://localhost:7687"
+    NEO4J_ENABLED: bool = True
+    NEO4J_URI: str = "neo4j+s://df6ecb3e.databases.neo4j.io"
     NEO4J_USER: str = "neo4j"
     NEO4J_PASSWORD: str | None = None
 

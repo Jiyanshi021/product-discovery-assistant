@@ -58,6 +58,36 @@ const ChatPage = () => {
     ));
   };
 
+  // ---------- NEW: order products based on how they appear in answer text ----------
+
+  const orderProductsByAnswerText = (products, answerText) => {
+    const text = (answerText || "").toLowerCase();
+
+    return products.slice().sort((a, b) => {
+      const titleA = (a.title || "").toLowerCase();
+      const titleB = (b.title || "").toLowerCase();
+
+      const idxA = text.indexOf(titleA);
+      const idxB = text.indexOf(titleB);
+
+      const safeIdxA = idxA === -1 ? Number.MAX_SAFE_INTEGER : idxA;
+      const safeIdxB = idxB === -1 ? Number.MAX_SAFE_INTEGER : idxB;
+
+      if (safeIdxA !== safeIdxB) {
+        return safeIdxA - safeIdxB; // jo pehle text me aaya, uska card pehle
+      }
+
+      // tie-breaker: rank agar ho, warna id
+      const ra = a.rank ?? 9999;
+      const rb = b.rank ?? 9999;
+      if (ra !== rb) return ra - rb;
+
+      const idA = a.product_id ?? a.id ?? 0;
+      const idB = b.product_id ?? b.id ?? 0;
+      return idA - idB;
+    });
+  };
+
   // ----------------------- send handler ------------------------
 
   async function handleSend(e) {
@@ -83,19 +113,17 @@ const ChatPage = () => {
       const res = await searchProducts(trimmed, 5);
 
       const rawResults = Array.isArray(res.results) ? res.results : [];
+      const answerText =
+        res.answer ||
+        "I couldn't find anything specific, but here are some options.";
 
-      const orderedResults = rawResults.slice().sort((a, b) => {
-        const ra = a.rank ?? 9999;
-        const rb = b.rank ?? 9999;
-        return ra - rb;
-      });
+      // 👉 Pehle answer text decide karo, fir uske hisaab se product order
+      const orderedResults = orderProductsByAnswerText(rawResults, answerText);
 
       const botMessage = {
         id: now + 1,
         sender: "bot",
-        text:
-          res.answer ||
-          "I couldn't find anything specific, but here are some options.",
+        text: answerText,
         products: orderedResults,
         primaryProductId:
           res.primary_product_id || (orderedResults[0]?.id ?? null),
@@ -146,9 +174,7 @@ const ChatPage = () => {
                       : "bg-card-light dark:bg-card-dark text-text-light dark:text-text-dark text-sm"
                   }`}
                 >
-                  {m.sender === "bot"
-                    ? renderBotText(safeText)
-                    : safeText}
+                  {m.sender === "bot" ? renderBotText(safeText) : safeText}
                 </div>
 
                 {/* Product cards for this assistant message */}
