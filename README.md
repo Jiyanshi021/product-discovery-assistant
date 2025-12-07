@@ -34,12 +34,6 @@ Prototype link: https://product-discovery-assistant-ochre.vercel.app/
 12. [Performance & Deployment Considerations](#performance--deployment-considerations)
 13. [Improvements (Prioritized)](#improvements-prioritized)
 
-* Checklist
-* FAQ
-* Example docker-compose.yml
-
-15. [Hindi Summary (हिंदी सारांश)](#हिंदी-सारांश)
-
 ---
 
 #  **Overview**
@@ -58,7 +52,6 @@ It:
 
 The result is an end-to-end mini “AI stylist” capable of answering queries like:
 
-> “Show me oversized hoodies under 2000 for gym.”
 
 ---
 
