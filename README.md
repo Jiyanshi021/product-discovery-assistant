@@ -33,7 +33,6 @@ Prototype link: https://product-discovery-assistant-ochre.vercel.app/
 11. [Security & Privacy Notes](#security--privacy-notes)
 12. [Performance & Deployment Considerations](#performance--deployment-considerations)
 13. [Improvements (Prioritized)](#improvements-prioritized)
-14. [Appendices](#appendices)
 
 * Checklist
 * FAQ
